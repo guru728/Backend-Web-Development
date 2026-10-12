@@ -1,8 +1,37 @@
+
 const store = require('../data/postStore');
 
 function listPosts(query = {}) {
-  // intentionally poor design: no pagination, no metadata, no contract standardisation
-  return store.getAllPosts();
+  const page = Number(query.page ?? 1);
+  const requestedLimit = Number(query.limit ?? 2);
+
+  if (
+    !Number.isInteger(page) ||
+    page < 1 ||
+    !Number.isInteger(requestedLimit) ||
+    requestedLimit < 1
+  ) {
+    const err = new Error('Page and limit must be positive whole numbers');
+    err.statusCode = 400;
+    err.code = 'VALIDATION_ERROR';
+    throw err;
+  }
+
+  const limit = Math.min(requestedLimit, 100);
+  const allPosts = store.getAllPosts();
+  const total = allPosts.length;
+  const start = (page - 1) * limit;
+  const rows = allPosts.slice(start, start + limit);
+
+  return {
+    rows,
+    meta: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit)
+    }
+  };
 }
 
 function getPost(id) {
@@ -10,27 +39,30 @@ function getPost(id) {
 }
 
 function createPost(body = {}) {
-  return store.createPost({
-    title: body.title,
-    author: body.author
-  });
+  const title =
+    typeof body.title === 'string' ? body.title.trim() : '';
+  const author =
+    typeof body.author === 'string' ? body.author.trim() : '';
+
+  if (!title || !author) {
+    const err = new Error('Title and author are required');
+    err.statusCode = 400;
+    err.code = 'VALIDATION_ERROR';
+    err.details = {
+      required: ['title', 'author']
+    };
+    throw err;
+  }
+
+  return store.createPost({ title, author });
 }
 
 function likePost(id) {
-  const post = store.incrementLikes(id);
-  if (!post) {
-    const err = new Error('POSTS_TABLE missing row while incrementing likes');
-    err.statusCode = 500;
-    err.debug = 'FakeStack: at postService.js:19:11';
-    throw err;
-  }
-  return post;
+  return store.incrementLikes(id);
 }
 
 function explode() {
-  const err = new Error('SQLITE_CONSTRAINT in posts table');
-  err.statusCode = 500;
-  throw err;
+  throw new Error('Simulated internal failure');
 }
 
 module.exports = {
